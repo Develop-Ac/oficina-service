@@ -67,19 +67,14 @@ export class S3Service {
     contentType = 'application/octet-stream',
     bucket = this.bucketDefault,
   ): Promise<void> {
-    try {
-      await this.client.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: body as any,
-          ContentType: contentType,
-        }),
-      );
-    } catch (error) {
-      console.error('Erro S3:', error?.$response || error);
-      throw error;
-    }
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: body as any,
+        ContentType: contentType,
+      }),
+    );
   }
 
   /**
