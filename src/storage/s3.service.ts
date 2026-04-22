@@ -67,8 +67,6 @@ export class S3Service {
     contentType = 'application/octet-stream',
     bucket = this.bucketDefault,
   ): Promise<void> { 
-    console.log(`Uploading to S3: bucket=${bucket}, key=${key}, contentType=${contentType}`);
-
     const v = new PutObjectCommand({
         Bucket: bucket,
         Key: key,
@@ -76,13 +74,9 @@ export class S3Service {
         ContentType: contentType,
       });
 
-    console.log(`PutObjectCommand created, sending...`);
-    console.log(`Command details: ${JSON.stringify(v.input)}`);
-
     await this.client.send(
       v
     );
-    console.log(`Upload successful: ${key}`);
   }
 
   /**
