@@ -64,7 +64,7 @@ const ALLOWED = new Set([
 const BUCKET = process.env.S3_BUCKET_AVARIAS || 'avarias';
 
 @ApiTags('Oficina - Checklists')
-@Controller('uploads') 
+@Controller('uploads')
 export class UploadsController {
   constructor(private readonly s3: S3Service) {}
 
@@ -157,97 +157,6 @@ export class UploadsController {
     return { ok: true, fileName: keyName, key: keyName, url };
   }
 
-  @Post('checklist')
-  @ApiOperation({
-    summary: 'Upload de imagem de checklist',
-    description: 'Faz upload de uma imagem de checklist, redimensiona e armazena no S3/MinIO'
-  })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    description: 'Arquivo de imagem para upload',
-    schema: {
-      type: 'object',
-      properties: {
-        file: {
-          type: 'string',
-          format: 'binary',
-          description: 'Arquivo de imagem (JPEG, PNG, WebP, HEIC, HEIF) - máximo 5MB'
-        }
-      },
-      required: ['file']
-    }
-  })
-  @ApiOkResponse({
-    description: 'Upload realizado com sucesso',
-    type: UploadResponseDto,
-    example: {
-      ok: true,
-      fileName: 'abc123def456.png',
-      key: 'abc123def456.png',
-      url: 'https://s3.example.com/avarias/abc123def456.png?signature=...'
-    }
-  })
-  @ApiBadRequestResponse({
-    description: 'Erro nos dados enviados (arquivo não enviado ou tipo inválido)',
-    example: { statusCode: 400, message: 'Arquivo obrigatório (campo "file")', error: 'Bad Request' }
-  })
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: memoryStorage(),
-      limits: { fileSize: MAX_BYTES },
-      fileFilter: (_req, file, cb) => {
-        if (!ALLOWED.has(file.mimetype)) {
-          return cb(
-            new BadRequestException('Tipo de arquivo não permitido'),
-            false,
-          );
-        }
-        cb(null, true);
-      },
-    }),
-  )
-  async uploadImgChecklist(@UploadedFile() file?: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('Arquivo obrigatório (campo "file")');
-    }
-
-    console.log(process.env.S3_ENDPOINT);
-
-    let pngBuffer: Buffer;
-    try {
-      pngBuffer = await sharp(file.buffer)
-        .rotate()
-        .resize({ width: 1280, height: 1280, fit: 'inside', withoutEnlargement: true })
-        .png({ quality: 85, compressionLevel: 9, adaptiveFiltering: true })
-        .toBuffer();
-    } catch {
-      pngBuffer = file.buffer; // fallback
-    }
-
-    const keyName = `${smallId(12)}.png`; 
-
-    await this.s3.putObject(
-      keyName,
-      pngBuffer,
-      'image/png',
-      'check-list',
-    );
-
-    let url: string | undefined;
-    if ((this.s3 as any).getPresignedGetUrl) {
-      try {
-        url = await (this.s3 as any).getPresignedGetUrl({
-          bucket: BUCKET,
-          key: keyName,
-          expiresIn: 3600,
-        });
-      } catch {}
-    }
-
-    // >>> DEVOLVE A KEY <<<
-    return { ok: true, fileName: keyName, key: keyName, url };
-  }
-
   @Get('avarias/url')
   @ApiOperation({
     summary: 'Gerar URL pré-assinada',
@@ -299,4 +208,4 @@ export class UploadsController {
       throw new BadRequestException(`Falha ao gerar URL pré-assinada: ${text}`);
     }
   }
-}
+} 
