@@ -71,12 +71,10 @@ export class S3Service {
         Bucket: bucket,
         Key: key,
         Body: body as any,
-        ContentType: contentType,
+        ContentType: contentType
       });
 
-    await this.client.send(
-      v
-    );
+    await this.client.send( v );
   }
 
   /**
