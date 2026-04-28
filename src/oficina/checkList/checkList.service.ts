@@ -82,7 +82,7 @@ export class ChecklistsService {
         : undefined,
     });
 
-    await Promise.all(body.fotos360?.map(async (foto) => {
+    await Promise.all(body.fotos360?.map(async (foto) => {console.log('Criando foto 360 para checklist', { checklistId: checklist.id, foto });
       await this.repo.createFoto({
         checklist_id: checklist.id,
         foto,
