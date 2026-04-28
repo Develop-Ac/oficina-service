@@ -54,15 +54,15 @@ export class ChecklistsController {
     return this.service.remove(id);
   }
 
-  @Post(':os/fotos')
+  @Post(':id/fotos')
   @ApiOperation({
     summary: 'Adicionar foto ao checklist',
     description: 'Adiciona uma foto a um checklist buscado pela OS interna'
   })
   @ApiCreatedResponse({ description: 'Foto criada com sucesso' })
   @ApiBadRequestResponse({ description: 'Dados inválidos' })
-  async createFoto(@Param('os') os: string, @Body() body: CreateChecklistFotoDto) {
-    return this.service.createFotoByOs(os, body);
+  async createFoto(@Param('id') id: string, @Body() body: CreateChecklistFotoDto) {
+    return this.service.createFotoByOs(id, body);
   }
 
   @Get(':os')

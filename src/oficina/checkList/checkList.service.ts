@@ -214,9 +214,9 @@ const where: Prisma.ofi_checklistsWhereInput | undefined = search
     return updatedChecklist;
   }
 
-  async createFotoByOs(os: string, dto: CreateChecklistFotoDto) {
+  async createFotoByOs(id: string, dto: CreateChecklistFotoDto) {
     const checklist = await this.repo.findFirst(
-      { where: { osInterna: os } },
+      { where: { id: id } },
     );
     if (!checklist) throw new NotFoundException('Checklist não encontrado para a OS informada');
     return this.repo.createFoto({ checklist_id: checklist.id, foto: dto.foto });
