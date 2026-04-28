@@ -82,12 +82,12 @@ export class ChecklistsService {
         : undefined,
     });
 
-    body.fotos360?.map(async (foto) => {
+    await Promise.all(body.fotos360?.map(async (foto) => {
       await this.repo.createFoto({
         checklist_id: checklist.id,
         foto,
       });
-    });
+    }) ?? []);
   
     return checklist;
   }
