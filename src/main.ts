@@ -6,6 +6,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as bodyParser from 'body-parser';
 // (opcional, mas recomendado quando usa cookies/autenticação)
 import cookieParser from 'cookie-parser';
+import basicAuth from 'express-basic-auth';
 
 function parseOrigins(env?: string): (string | RegExp)[] {
   if (!env) return [];
@@ -70,13 +71,24 @@ async function bootstrap() {
     ],
     exposedHeaders: ['Content-Disposition'],
     maxAge: 86400, // cache do preflight por 1 dia
-  });
+  }); 
 
   // Garante Vary: Origin (útil se usar origin dinâmico/função)
   app.use((req, res, next) => {
     res.setHeader('Vary', 'Origin');
     next();
   });
+
+  // Protege a rota /docs (ou o caminho que você definiu)
+  app.use(
+    ['/docs', '/docs-json'],
+    basicAuth({
+      challenge: true,
+      users: {
+        'admin': 'Ac@2025acesso', // Usuário e Senha
+      },
+    }),
+  );
 
   app.use(bodyParser.json({ limit: '25mb' }));
   app.use(bodyParser.urlencoded({ limit: '25mb', extended: true }));

@@ -77,6 +77,23 @@ export class S3Service {
     await this.client.send( v );
   }
 
+    async putObjectChecklist(
+    key: string,
+    body: Buffer | Uint8Array | Blob | string,
+    contentType = 'application/octet-stream',
+    bucket = 'check-list',
+  ): Promise<void> { 
+    console.log('putObjectChecklist', { key, contentType, bucket });
+    const v = new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: body as any,
+        ContentType: contentType
+      });
+
+    await this.client.send( v );
+  }
+
   /**
    * Verifica existência (lança erro se não existir).
    */

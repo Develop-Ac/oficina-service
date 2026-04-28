@@ -11,6 +11,7 @@ import {
 } from '@nestjs/swagger';
 import { ChecklistsService } from './checkList.service';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
+import { CreateChecklistFotoDto } from './dto/create-checklist-foto.dto';
 import { ListChecklistsQueryDto } from './dto/list-checklists.dto';
 
 @ApiTags('Oficina - Checklists')
@@ -51,6 +52,17 @@ export class ChecklistsController {
   @ApiOperation({ summary: 'Remover checklist' })
   async remove(@Param('id', ParseIntPipe) id: string) {
     return this.service.remove(id);
+  }
+
+  @Post(':os/fotos')
+  @ApiOperation({
+    summary: 'Adicionar foto ao checklist',
+    description: 'Adiciona uma foto a um checklist buscado pela OS interna'
+  })
+  @ApiCreatedResponse({ description: 'Foto criada com sucesso' })
+  @ApiBadRequestResponse({ description: 'Dados inválidos' })
+  async createFoto(@Param('os') os: string, @Body() body: CreateChecklistFotoDto) {
+    return this.service.createFotoByOs(os, body);
   }
 
   @Get(':os')

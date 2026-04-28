@@ -113,6 +113,10 @@ export class ChecklistRepository {
     }
   }
 
+  createFoto(data: { checklist_id: string; foto: string }) {
+    return this.prisma.ofi_checklists_fotos.create({ data });
+  }
+
   async updateChecklistAvarias(checklistId: string, avarias: any[]) {
     // Exemplo: Atualizar avarias relacionadas
     for (const avaria of avarias) {

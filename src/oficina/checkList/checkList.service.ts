@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ChecklistRepository } from './checkList.repository';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
+import { CreateChecklistFotoDto } from './dto/create-checklist-foto.dto';
 import { Prisma } from '@prisma/client';
 
 type ListQuery = {
@@ -211,6 +212,14 @@ const where: Prisma.ofi_checklistsWhereInput | undefined = search
     const updatedChecklist = await this.repo.update({ id }, validData);
 
     return updatedChecklist;
+  }
+
+  async createFotoByOs(os: string, dto: CreateChecklistFotoDto) {
+    const checklist = await this.repo.findFirst(
+      { where: { osInterna: os } },
+    );
+    if (!checklist) throw new NotFoundException('Checklist não encontrado para a OS informada');
+    return this.repo.createFoto({ checklist_id: checklist.id, foto: dto.foto });
   }
 
   // Aliases para compatibilidade com os testes
