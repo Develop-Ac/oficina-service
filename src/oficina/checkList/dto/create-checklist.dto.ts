@@ -195,4 +195,6 @@ export class CreateChecklistDto {
   @ApiPropertyOptional({ deprecated: true, example: null })
   @IsOptional() @IsString()
   assinaturaResponsavelBase64?: string | null;
+
+  fotos360?: string[]; // não exposto na API, mas pode ser usado internamente para receber um array de fotos 360
 }

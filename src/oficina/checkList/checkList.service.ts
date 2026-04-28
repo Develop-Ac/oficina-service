@@ -35,7 +35,7 @@ export class ChecklistsService {
     const assinaturaResponsavel =
       body.assinaturasresponsavelBase64 ?? body.assinaturaResponsavelBase64 ?? null;
 
-    return this.repo.create({
+    const checklist = await this.repo.create({
       osInterna: body.osInterna ?? null,
       dataHoraEntrada: body.dataHoraEntrada ? new Date(body.dataHoraEntrada) : null,
       observacoes: body.observacoes ?? null,
@@ -81,6 +81,15 @@ export class ChecklistsService {
           }
         : undefined,
     });
+
+    body.fotos360?.map(async (foto) => {
+      await this.repo.createFoto({
+        checklist_id: checklist.id,
+        foto,
+      });
+    });
+  
+    return checklist;
   }
 
   /** LIST (com paginação + busca) */
