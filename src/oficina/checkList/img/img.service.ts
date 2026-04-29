@@ -12,10 +12,13 @@ export class ImagesService {
   async listByChecklistId(checklistId: string) {
     const rows = await this.repo.listByChecklistId(checklistId);
 
+    const fotos = await this.repo.listFotosByChecklistId(checklistId);
+
     return {
       checklistId,
       count: rows.length,
       data: rows,
+      fotos: fotos
     };
   }
 }

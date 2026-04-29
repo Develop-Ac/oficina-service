@@ -17,4 +17,13 @@ export class ImagesRepository {
       },
     });
   }
+
+  listFotosByChecklistId(checklistId: string) {
+    return this.prisma.ofi_checklists_fotos.findMany({
+      where: { checklist_id: checklistId },
+      select: {
+        foto: true,
+      },
+    });
+  }
 }

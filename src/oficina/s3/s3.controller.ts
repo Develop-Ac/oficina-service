@@ -297,4 +297,56 @@ export class UploadsController {
       throw new BadRequestException(`Falha ao gerar URL pré-assinada: ${text}`);
     }
   }
+
+  @Get('fotos/url')
+  @ApiOperation({
+    summary: 'Gerar URL pré-assinada',
+    description: 'Gera uma URL pré-assinada para download de arquivo do S3/MinIO'
+  })
+  @ApiQuery({
+    name: 'key',
+    description: 'Chave do arquivo no bucket',
+    example: 'abc123def456.png',
+    required: true
+  })
+  @ApiQuery({
+    name: 'expires',
+    description: 'Tempo de expiração em segundos (60 a 86400)',
+    example: '3600',
+    required: false
+  })
+  @ApiOkResponse({
+    description: 'URL pré-assinada gerada com sucesso',
+    type: PresignResponseDto,
+    example: {
+      ok: true,
+      url: 'https://s3.example.com/avarias/abc123def456.png?signature=...'
+    }
+  })
+  @ApiBadRequestResponse({
+    description: 'Chave não informada ou arquivo não encontrado',
+    example: { statusCode: 400, message: 'Informe key', error: 'Bad Request' }
+  })
+  async presignFotos(@Query('key') key: string, @Query('expires') expires?: string) {
+    if (!key) throw new BadRequestException('Informe key');
+
+    const ttl = Math.max(60, Math.min(Number(expires) || 3600, 24 * 3600)); // entre 1min e 24h
+
+    try {
+      const url = await this.s3.getPresignedGetUrl(key, ttl, 'check-list');
+      return { ok: true, url };
+    } catch (e: any) {
+      const msg = String(e?.name || '').toLowerCase();
+      const text = String(e?.message || '');
+
+      if (msg.includes('notfound') || /NoSuchKey/i.test(text)) {
+        throw new BadRequestException('Arquivo não encontrado no bucket.');
+      }
+      // Erros TLS/CERT
+      if (/self-signed certificate|certificate/i.test(text)) {
+        throw new BadRequestException('Falha de certificado TLS ao falar com o S3. Verifique o certificado do endpoint ou habilite S3_TLS_INSECURE=true temporariamente.');
+      }
+      throw new BadRequestException(`Falha ao gerar URL pré-assinada: ${text}`);
+    }
+  }
 } 
