@@ -79,7 +79,29 @@ export class AvariaDto {
   timestamp?: number;
 }
 
-@ApiExtraModels(ChecklistItemDto, AvariaDto)
+export class Foto360Dto {
+  @ApiPropertyOptional({ example: 'foto_360' })
+  @IsOptional() @IsString() @MaxLength(40)
+  tipo?: string;
+
+  @ApiPropertyOptional({ example: 'frente' })
+  @IsOptional() @IsString() @MaxLength(120)
+  posicao?: string;
+
+  @ApiPropertyOptional({ example: 1 })
+  @IsOptional() @IsInt()
+  ordem?: number;
+
+  @ApiPropertyOptional({ example: 'Frente do veiculo' })
+  @IsOptional() @IsString() @MaxLength(200)
+  descricao?: string;
+
+  @ApiPropertyOptional({ example: 'abc123def456.png', description: 'Key da foto enviada para o bucket' })
+  @IsString() @MaxLength(500)
+  foto!: string;
+}
+
+@ApiExtraModels(ChecklistItemDto, AvariaDto, Foto360Dto)
 export class CreateChecklistDto {
   // ========= Cabeçalho / básicos =========
   @ApiPropertyOptional({ example: 'OS-2025-001' })
@@ -196,5 +218,26 @@ export class CreateChecklistDto {
   @IsOptional() @IsString()
   assinaturaResponsavelBase64?: string | null;
 
-  fotos360?: string[]; // não exposto na API, mas pode ser usado internamente para receber um array de fotos 360
+  @ApiPropertyOptional({
+    description: 'Aceita formato novo com metadados ou formato legado string[] com keys das fotos',
+    type: 'array',
+    items: {
+      oneOf: [
+        { type: 'string', example: 'abc123def456.png' },
+        {
+          type: 'object',
+          properties: {
+            tipo: { type: 'string', example: 'foto_360' },
+            posicao: { type: 'string', example: 'frente' },
+            ordem: { type: 'integer', example: 1 },
+            descricao: { type: 'string', example: 'Frente do veiculo' },
+            foto: { type: 'string', example: 'abc123def456.png' },
+          },
+          required: ['foto'],
+        },
+      ],
+    },
+  })
+  @IsOptional() @IsArray()
+  fotos360?: Array<string | Foto360Dto>;
 }

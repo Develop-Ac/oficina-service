@@ -9,6 +9,7 @@ describe('CheckListService', () => {
 
   const mockCheckListRepository = {
     create: jest.fn(),
+    createFoto: jest.fn(),
     findAll: jest.fn(),
     findById: jest.fn(),
     findUnique: jest.fn(),
@@ -39,6 +40,17 @@ describe('CheckListService', () => {
   });
 
   describe('create', () => {
+    const fotos360Obrigatorias = [
+      { tipo: 'foto_360', posicao: 'frente', ordem: 1, descricao: 'Frente do veiculo', foto: 'k1.png' },
+      { tipo: 'foto_360', posicao: 'frente_lateral_direita', ordem: 2, descricao: 'Frente + lateral direita', foto: 'k2.png' },
+      { tipo: 'foto_360', posicao: 'lateral_direita', ordem: 3, descricao: 'Lateral direita', foto: 'k3.png' },
+      { tipo: 'foto_360', posicao: 'lateral_direita_traseira', ordem: 4, descricao: 'Lateral direita + traseira', foto: 'k4.png' },
+      { tipo: 'foto_360', posicao: 'traseira', ordem: 5, descricao: 'Traseira', foto: 'k5.png' },
+      { tipo: 'foto_360', posicao: 'traseira_lateral_esquerda', ordem: 6, descricao: 'Traseira + lateral esquerda', foto: 'k6.png' },
+      { tipo: 'foto_360', posicao: 'lateral_esquerda', ordem: 7, descricao: 'Lateral esquerda', foto: 'k7.png' },
+      { tipo: 'foto_360', posicao: 'lateral_esquerda_frente', ordem: 8, descricao: 'Lateral esquerda + frente do veiculo', foto: 'k8.png' },
+    ];
+
     it('deve criar um novo checklist', async () => {
       const createChecklistDto: CreateChecklistDto = {
         osInterna: 'OS-123',
@@ -74,6 +86,7 @@ describe('CheckListService', () => {
             timestamp: 1705312800000,
           },
         ],
+        fotos360: fotos360Obrigatorias,
       };
 
       const mockChecklistCreated = {
@@ -97,6 +110,7 @@ describe('CheckListService', () => {
       };
 
       repository.create.mockResolvedValue(mockChecklistCreated);
+      repository.createFoto.mockResolvedValue({ id: 'foto-1' });
 
       const result = await service.create(createChecklistDto);
 
@@ -142,6 +156,7 @@ describe('CheckListService', () => {
         })
       }));
       expect(result).toEqual(mockChecklistCreated);
+      expect(repository.createFoto).toHaveBeenCalledTimes(8);
     });
 
     it('deve propagar erro do repository na criação', async () => {
@@ -160,6 +175,7 @@ describe('CheckListService', () => {
         veiculoKm: 10000,
         checklist: [],
         avarias: [],
+        fotos360: fotos360Obrigatorias,
       };
 
       repository.create.mockRejectedValue(new Error('Erro na criação'));
