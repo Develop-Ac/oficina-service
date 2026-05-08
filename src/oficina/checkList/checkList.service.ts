@@ -426,12 +426,16 @@ export class ChecklistsService {
       throw new ConflictException('Checklist ja foi entregue.');
     }
 
-    return this.repo.update(
+    const entregue = await this.repo.update(
       { id },
       {
         dataHoraEntrega: new Date(),
         assinaturaRetiradaBase64,
       },
     );
+
+    await this.repo.syncChecklistStatusEntregue(id);
+
+    return entregue;
   }
 }

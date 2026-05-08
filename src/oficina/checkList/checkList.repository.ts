@@ -136,6 +136,18 @@ export class ChecklistRepository {
     return created;
   }
 
+  async syncChecklistStatusEntregue(checklistId: string) {
+    try {
+      await this.prisma.$executeRawUnsafe(
+        'UPDATE ofi_checklists SET status = $1 WHERE id = $2',
+        'ENTREGUE',
+        checklistId,
+      );
+    } catch {
+      // Compatibilidade: mantém fluxo quando a coluna status não existe nesse ambiente.
+    }
+  }
+
   async findFotosByChecklistId(checklistId: string) {
     try {
       return await this.prisma.$queryRawUnsafe<Array<{
