@@ -82,7 +82,14 @@ export class ChecklistsController {
   })
   @ApiBody({ type: EntregarChecklistDto })
   async entregarChecklist(@Param('id') id: string, @Body() body: EntregarChecklistDto) {
-    return this.service.entregarChecklist(id, body.assinaturaRetiradaBase64);
+    const entregue = await this.service.entregarChecklist(id, body.assinaturaRetiradaBase64);
+
+    // Converte BigInt para string para serializacao JSON segura.
+    return JSON.parse(
+      JSON.stringify(entregue, (key, value) =>
+        typeof value === 'bigint' ? value.toString() : value,
+      ),
+    );
   }
 
   @Get(':os')
