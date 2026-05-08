@@ -131,19 +131,17 @@ export class ChecklistsService {
     });
 
     await Promise.all(fotos360Normalizadas.map(async (fotoMeta) => {
-      const payloadFoto = {
+      const tipoFoto = {
         tipo: 'foto_360',
         posicao: fotoMeta.posicao,
         ordem: fotoMeta.ordem,
         descricao: fotoMeta.descricao,
-        foto: fotoMeta.foto,
       };
 
-      const fotoSerializada = JSON.stringify(payloadFoto);
-      console.log('Criando foto 360 para checklist', { checklistId: checklist.id, fotoMeta: payloadFoto });
       await this.repo.createFoto({
         checklist_id: checklist.id,
-        foto: fotoSerializada,
+        foto: fotoMeta.foto,
+        tipo_foto: tipoFoto,
       });
     }));
   
@@ -320,7 +318,12 @@ export class ChecklistsService {
       }
     );
     if (!item) throw new NotFoundException('Checklist não encontrado');
-    return item;
+
+    const fotos = await this.repo.findFotosByChecklistId(item.id);
+    return {
+      ...item,
+      ofi_checklists_fotos: fotos,
+    };
   }
 
   async findEntregaDetalhe(id: string) {
@@ -335,33 +338,51 @@ export class ChecklistsService {
 
     if (!item) throw new NotFoundException('Checklist não encontrado');
 
-    const fotos360 = (item.ofi_checklists_fotos || []).map((f) => {
-      let parsed: any = null;
+    const fotosRaw = await this.repo.findFotosByChecklistId(item.id);
+
+    const fotos360 = (fotosRaw || []).map((f) => {
+      const tipoFotoObj = typeof f.tipo_foto === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(f.tipo_foto);
+            } catch {
+              return null;
+            }
+          })()
+        : (f.tipo_foto && typeof f.tipo_foto === 'object' ? f.tipo_foto : null);
+
+      let parsedLegacy: any = null;
       try {
-        parsed = f.foto ? JSON.parse(f.foto) : null;
+        parsedLegacy = f.foto ? JSON.parse(f.foto) : null;
       } catch {
-        parsed = null;
+        parsedLegacy = null;
       }
 
-      const parsedKey = typeof parsed?.foto === 'string' && parsed.foto.trim()
-        ? parsed.foto.trim()
-        : typeof parsed?.key === 'string' && parsed.key.trim()
-          ? parsed.key.trim()
-          : typeof parsed?.fileName === 'string' && parsed.fileName.trim()
-            ? parsed.fileName.trim()
-            : '';
-
-      const key = parsedKey
-        ? parsedKey
-        : (typeof f.foto === 'string' ? f.foto.trim() : '');
+      const key = typeof f.foto === 'string' && f.foto.trim() && !f.foto.trim().startsWith('{')
+        ? f.foto.trim()
+        : typeof parsedLegacy?.foto === 'string' && parsedLegacy.foto.trim()
+          ? parsedLegacy.foto.trim()
+          : typeof parsedLegacy?.key === 'string' && parsedLegacy.key.trim()
+            ? parsedLegacy.key.trim()
+            : typeof parsedLegacy?.fileName === 'string' && parsedLegacy.fileName.trim()
+              ? parsedLegacy.fileName.trim()
+              : '';
 
       return {
         id: f.id,
         key,
-        tipo: typeof parsed?.tipo === 'string' ? parsed.tipo : 'foto_360',
-        posicao: typeof parsed?.posicao === 'string' ? parsed.posicao : null,
-        ordem: Number.isFinite(Number(parsed?.ordem)) ? Number(parsed.ordem) : null,
-        descricao: typeof parsed?.descricao === 'string' ? parsed.descricao : null,
+        tipo: typeof tipoFotoObj?.tipo === 'string'
+          ? tipoFotoObj.tipo
+          : (typeof parsedLegacy?.tipo === 'string' ? parsedLegacy.tipo : 'foto_360'),
+        posicao: typeof tipoFotoObj?.posicao === 'string'
+          ? tipoFotoObj.posicao
+          : (typeof parsedLegacy?.posicao === 'string' ? parsedLegacy.posicao : null),
+        ordem: Number.isFinite(Number(tipoFotoObj?.ordem))
+          ? Number(tipoFotoObj.ordem)
+          : (Number.isFinite(Number(parsedLegacy?.ordem)) ? Number(parsedLegacy.ordem) : null),
+        descricao: typeof tipoFotoObj?.descricao === 'string'
+          ? tipoFotoObj.descricao
+          : (typeof parsedLegacy?.descricao === 'string' ? parsedLegacy.descricao : null),
         timestamp: f.timestamp,
       };
     }).filter((f) => !!f.key);

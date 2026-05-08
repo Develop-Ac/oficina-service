@@ -113,8 +113,52 @@ export class ChecklistRepository {
     }
   }
 
-  createFoto(data: { checklist_id: string; foto: string }) {
-    return this.prisma.ofi_checklists_fotos.create({ data });
+  async createFoto(data: { checklist_id: string; foto: string; tipo_foto?: Record<string, any> | null }) {
+    const created = await this.prisma.ofi_checklists_fotos.create({
+      data: {
+        checklist_id: data.checklist_id,
+        foto: data.foto,
+      },
+    });
+
+    if (data.tipo_foto) {
+      try {
+        await this.prisma.$executeRawUnsafe(
+          'UPDATE ofi_checklists_fotos SET tipo_foto = $1::jsonb WHERE id = $2',
+          JSON.stringify(data.tipo_foto),
+          created.id,
+        );
+      } catch {
+        // Compatibilidade: se a coluna tipo_foto ainda nao existir, mantem o fluxo.
+      }
+    }
+
+    return created;
+  }
+
+  async findFotosByChecklistId(checklistId: string) {
+    try {
+      return await this.prisma.$queryRawUnsafe<Array<{
+        id: string;
+        foto: string | null;
+        timestamp: Date;
+        tipo_foto: any;
+      }>>(
+        'SELECT id, foto, timestamp, tipo_foto FROM ofi_checklists_fotos WHERE checklist_id = $1 ORDER BY timestamp ASC',
+        checklistId,
+      );
+    } catch {
+      const fotos = await this.prisma.$queryRawUnsafe<Array<{
+        id: string;
+        foto: string | null;
+        timestamp: Date;
+      }>>(
+        'SELECT id, foto, timestamp FROM ofi_checklists_fotos WHERE checklist_id = $1 ORDER BY timestamp ASC',
+        checklistId,
+      );
+
+      return fotos.map((f) => ({ ...f, tipo_foto: null }));
+    }
   }
 
   async updateChecklistAvarias(checklistId: string, avarias: any[]) {
