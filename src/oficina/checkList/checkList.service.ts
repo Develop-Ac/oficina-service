@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ChecklistRepository } from './checkList.repository';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
 import { CreateChecklistFotoDto } from './dto/create-checklist-foto.dto';
@@ -11,17 +11,6 @@ type ListQuery = {
   orderBy?: 'createdAt' | 'dataHoraEntrada';
   orderDir?: 'asc' | 'desc';
 };
-
-const FOTOS_360_OBRIGATORIAS = [
-  { ordem: 1, posicao: 'frente', descricao: 'Frente do veiculo' },
-  { ordem: 2, posicao: 'frente_lateral_direita', descricao: 'Frente + lateral direita' },
-  { ordem: 3, posicao: 'lateral_direita', descricao: 'Lateral direita' },
-  { ordem: 4, posicao: 'lateral_direita_traseira', descricao: 'Lateral direita + traseira' },
-  { ordem: 5, posicao: 'traseira', descricao: 'Traseira' },
-  { ordem: 6, posicao: 'traseira_lateral_esquerda', descricao: 'Traseira + lateral esquerda' },
-  { ordem: 7, posicao: 'lateral_esquerda', descricao: 'Lateral esquerda' },
-  { ordem: 8, posicao: 'lateral_esquerda_frente', descricao: 'Lateral esquerda + frente do veiculo' },
-];
 
 type Foto360Normalizada = {
   tipo: string;
@@ -37,12 +26,11 @@ function normalizarFoto360(entry: any, index: number): Foto360Normalizada | null
   if (typeof entry === 'string') {
     const foto = entry.trim();
     if (!foto) return null;
-    const fallback = FOTOS_360_OBRIGATORIAS[index];
     return {
       tipo: 'foto_360',
-      posicao: fallback?.posicao || `posicao_${index + 1}`,
-      ordem: fallback?.ordem || (index + 1),
-      descricao: fallback?.descricao || `Foto ${index + 1}`,
+      posicao: `posicao_${index + 1}`,
+      ordem: index + 1,
+      descricao: `Foto ${index + 1}`,
       foto,
     };
   }
@@ -52,16 +40,15 @@ function normalizarFoto360(entry: any, index: number): Foto360Normalizada | null
     const foto = typeof fotoRaw === 'string' ? fotoRaw.trim() : '';
     if (!foto) return null;
 
-    const fallback = FOTOS_360_OBRIGATORIAS[index];
     return {
       tipo: typeof entry.tipo === 'string' && entry.tipo.trim() ? entry.tipo.trim() : 'foto_360',
       posicao: typeof entry.posicao === 'string' && entry.posicao.trim()
         ? entry.posicao.trim()
-        : (typeof entry.chave === 'string' && entry.chave.trim() ? entry.chave.trim() : (fallback?.posicao || `posicao_${index + 1}`)),
-      ordem: Number.isFinite(Number(entry.ordem)) ? Number(entry.ordem) : (fallback?.ordem || (index + 1)),
+        : (typeof entry.chave === 'string' && entry.chave.trim() ? entry.chave.trim() : `posicao_${index + 1}`),
+      ordem: Number.isFinite(Number(entry.ordem)) ? Number(entry.ordem) : (index + 1),
       descricao: typeof entry.descricao === 'string' && entry.descricao.trim()
         ? entry.descricao.trim()
-        : (typeof entry.titulo === 'string' && entry.titulo.trim() ? entry.titulo.trim() : (fallback?.descricao || `Foto ${index + 1}`)),
+        : (typeof entry.titulo === 'string' && entry.titulo.trim() ? entry.titulo.trim() : `Foto ${index + 1}`),
       foto,
     };
   }
@@ -78,36 +65,6 @@ export class ChecklistsService {
     const fotos360Normalizadas = (body.fotos360 || [])
       .map((entry, index) => normalizarFoto360(entry, index))
       .filter((f): f is Foto360Normalizada => !!f);
-
-    if (fotos360Normalizadas.length !== FOTOS_360_OBRIGATORIAS.length) {
-      const faltantesBasicos = FOTOS_360_OBRIGATORIAS
-        .slice(fotos360Normalizadas.length)
-        .map((f) => `${f.ordem}. ${f.descricao}`);
-      throw new BadRequestException(
-        `Checklist nao pode ser concluido sem as 8 fotos 360 obrigatorias. Pendentes: ${faltantesBasicos.join(', ') || 'verifique as 8 posicoes.'}`,
-      );
-    }
-
-    const posicoesUnicas = new Set(fotos360Normalizadas.map((f) => f.posicao));
-    const ordemUnica = new Set(fotos360Normalizadas.map((f) => f.ordem));
-    if (posicoesUnicas.size !== 8 || ordemUnica.size !== 8) {
-      throw new BadRequestException('Fotos 360 invalidas: posicoes e ordens devem ser unicas e completas (1 a 8).');
-    }
-
-    const posicoesEsperadas = new Set(FOTOS_360_OBRIGATORIAS.map((f) => f.posicao));
-    const faltantes = FOTOS_360_OBRIGATORIAS
-      .filter((f) => !posicoesUnicas.has(f.posicao))
-      .map((f) => `${f.ordem}. ${f.descricao}`);
-
-    const extras = fotos360Normalizadas
-      .filter((f) => !posicoesEsperadas.has(f.posicao))
-      .map((f) => `${f.ordem}. ${f.posicao}`);
-
-    if (faltantes.length || extras.length) {
-      throw new BadRequestException(
-        `Fotos 360 invalidas. Faltantes: ${faltantes.join(', ') || 'nenhuma'}. Extras: ${extras.join(', ') || 'nenhuma'}.`,
-      );
-    }
 
     // normaliza KM para BigInt (se seu schema é BigInt?)
     let veiculoKmBig: bigint | null = null;
