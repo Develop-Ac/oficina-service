@@ -56,6 +56,7 @@ model ofi_checklists {
   id                           String                   @id @default(cuid())
   osInterna                    String?
   dataHoraEntrada              DateTime?
+  dataHoraEntrega              DateTime?
   observacoes                  String?
   combustivelPercentual        Int?
   clienteNome                  String?
@@ -70,6 +71,7 @@ model ofi_checklists {
   updatedAt                    DateTime                 @updatedAt
   assinaturasclienteBase64     String?
   assinaturasresponsavelBase64 String?
+  assinaturaRetiradaBase64     String?
   ofi_checklists_avarias       ofi_checklists_avarias[]
   ofi_checklists_fotos         ofi_checklists_fotos[]
   ofi_checklists_items         ofi_checklists_items[]

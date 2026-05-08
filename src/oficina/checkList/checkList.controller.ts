@@ -13,6 +13,7 @@ import { ChecklistsService } from './checkList.service';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
 import { CreateChecklistFotoDto } from './dto/create-checklist-foto.dto';
 import { ListChecklistsQueryDto } from './dto/list-checklists.dto';
+import { EntregarChecklistDto } from './dto/entregar-checklist.dto';
 
 @ApiTags('Oficina - Checklists')
 @Controller('checklists')
@@ -63,6 +64,25 @@ export class ChecklistsController {
   @ApiBadRequestResponse({ description: 'Dados inválidos' })
   async createFoto(@Param('id') id: string, @Body() body: CreateChecklistFotoDto) {
     return this.service.createFotoByOs(id, body);
+  }
+
+  @Get(':id/entrega')
+  @ApiOperation({
+    summary: 'Detalhes para tela de entrega do veículo',
+    description: 'Retorna itens, avarias e fotos para a tela de entrega do veículo.',
+  })
+  async getEntregaDetalhe(@Param('id') id: string) {
+    return this.service.findEntregaDetalhe(id);
+  }
+
+  @Post(':id/entregar')
+  @ApiOperation({
+    summary: 'Concluir entrega do veículo',
+    description: 'Registra assinatura de retirada e data/hora de entrega no checklist.',
+  })
+  @ApiBody({ type: EntregarChecklistDto })
+  async entregarChecklist(@Param('id') id: string, @Body() body: EntregarChecklistDto) {
+    return this.service.entregarChecklist(id, body.assinaturaRetiradaBase64);
   }
 
   @Get(':os')

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ChecklistRepository } from './checkList.repository';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
 import { CreateChecklistFotoDto } from './dto/create-checklist-foto.dto';
@@ -185,6 +185,7 @@ export class ChecklistsService {
           id: true,
           osInterna: true,
           dataHoraEntrada: true,
+          dataHoraEntrega: true,
           observacoes: true,
           combustivelPercentual: true,
           clienteNome: true,
@@ -315,9 +316,93 @@ export class ChecklistsService {
       {
         ofi_checklists_items: true,
         ofi_checklists_avarias: true,
+        ofi_checklists_fotos: true,
       }
     );
     if (!item) throw new NotFoundException('Checklist não encontrado');
     return item;
+  }
+
+  async findEntregaDetalhe(id: string) {
+    const item = await this.repo.findUnique(
+      { id },
+      {
+        ofi_checklists_items: true,
+        ofi_checklists_avarias: true,
+        ofi_checklists_fotos: true,
+      },
+    );
+
+    if (!item) throw new NotFoundException('Checklist não encontrado');
+
+    const fotos360 = (item.ofi_checklists_fotos || []).map((f) => {
+      let parsed: any = null;
+      try {
+        parsed = f.foto ? JSON.parse(f.foto) : null;
+      } catch {
+        parsed = null;
+      }
+
+      const key = typeof parsed?.foto === 'string' && parsed.foto.trim()
+        ? parsed.foto.trim()
+        : (typeof f.foto === 'string' ? f.foto.trim() : '');
+
+      return {
+        id: f.id,
+        key,
+        tipo: typeof parsed?.tipo === 'string' ? parsed.tipo : 'foto_360',
+        posicao: typeof parsed?.posicao === 'string' ? parsed.posicao : null,
+        ordem: Number.isFinite(Number(parsed?.ordem)) ? Number(parsed.ordem) : null,
+        descricao: typeof parsed?.descricao === 'string' ? parsed.descricao : null,
+        timestamp: f.timestamp,
+      };
+    }).filter((f) => !!f.key);
+
+    const fotosAvarias = (item.ofi_checklists_avarias || [])
+      .filter((a) => !!a.fotoBase64)
+      .map((a) => ({
+        id: a.id,
+        key: a.fotoBase64,
+        peca: a.peca,
+        tipo: a.tipo,
+        observacoes: a.observacoes,
+        timestamp: a.timestamp,
+      }));
+
+    return {
+      id: item.id,
+      osInterna: item.osInterna,
+      dataHoraEntrada: item.dataHoraEntrada,
+      dataHoraEntrega: item.dataHoraEntrega,
+      clienteNome: item.clienteNome,
+      veiculoNome: item.veiculoNome,
+      veiculoPlaca: item.veiculoPlaca,
+      combustivelPercentual: item.combustivelPercentual,
+      checklistItems: item.ofi_checklists_items,
+      avarias: item.ofi_checklists_avarias,
+      fotosAvarias,
+      fotos360,
+      assinaturaRetiradaBase64: item.assinaturaRetiradaBase64,
+    };
+  }
+
+  async entregarChecklist(id: string, assinaturaRetiradaBase64: string) {
+    if (!assinaturaRetiradaBase64?.trim()) {
+      throw new BadRequestException('Assinatura de retirada e obrigatoria.');
+    }
+
+    const item = await this.repo.findUnique({ id });
+    if (!item) throw new NotFoundException('Checklist não encontrado');
+    if (item.dataHoraEntrega) {
+      throw new ConflictException('Checklist ja foi entregue.');
+    }
+
+    return this.repo.update(
+      { id },
+      {
+        dataHoraEntrega: new Date(),
+        assinaturaRetiradaBase64,
+      },
+    );
   }
 }
