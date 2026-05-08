@@ -146,7 +146,7 @@ export class UploadsController {
     if ((this.s3 as any).getPresignedGetUrl) {
       try {
         url = await (this.s3 as any).getPresignedGetUrl({
-          bucket: BUCKET,
+          bucket: 'check-list',
           key: keyName,
           expiresIn: 3600,
         });
