@@ -324,7 +324,7 @@ export class ChecklistsService {
   }
 
   async findEntregaDetalhe(id: string) {
-    const item = await this.repo.findUnique(
+    const item: any = await this.repo.findUnique(
       { id },
       {
         ofi_checklists_items: true,
