@@ -343,8 +343,16 @@ export class ChecklistsService {
         parsed = null;
       }
 
-      const key = typeof parsed?.foto === 'string' && parsed.foto.trim()
+      const parsedKey = typeof parsed?.foto === 'string' && parsed.foto.trim()
         ? parsed.foto.trim()
+        : typeof parsed?.key === 'string' && parsed.key.trim()
+          ? parsed.key.trim()
+          : typeof parsed?.fileName === 'string' && parsed.fileName.trim()
+            ? parsed.fileName.trim()
+            : '';
+
+      const key = parsedKey
+        ? parsedKey
         : (typeof f.foto === 'string' ? f.foto.trim() : '');
 
       return {
