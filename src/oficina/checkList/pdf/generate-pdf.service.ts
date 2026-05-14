@@ -48,17 +48,10 @@ export class GenerateChecklistPdfService {
   }
 
   private dataUrlToBuffer(dataUrlOrBase64?: string | null): Buffer | null {
-    if (!dataUrlOrBase64) return null;
-    if (dataUrlOrBase64.startsWith('data:')) {
-      const base64 = dataUrlOrBase64.split(',')[1] ?? '';
-      if (!base64) return null;
-      return Buffer.from(base64, 'base64');
-    }
-    try {
-      return Buffer.from(dataUrlOrBase64, 'base64');
-    } catch {
-      return null;
-    }
+    if (!dataUrlOrBase64 || !dataUrlOrBase64.startsWith('data:')) return null;
+    const base64 = dataUrlOrBase64.split(',')[1] ?? '';
+    if (!base64) return null;
+    return Buffer.from(base64, 'base64');
   }
 
   private maybePlainBase64ToBuffer(raw?: string | null): Buffer | null {
@@ -99,8 +92,11 @@ export class GenerateChecklistPdfService {
     for (const bucket of this.uniqueList(buckets)) {
       try {
         return await this.s3.getObjectBuffer(keyOrBase64, bucket);
-      } catch {
-        // tenta o próximo bucket
+      } catch (err) {
+        console.warn(
+          `[PDF] Falha ao obter imagem. bucket=${bucket} key=${keyOrBase64}`,
+          (err as Error)?.message
+        );
       }
     }
 
