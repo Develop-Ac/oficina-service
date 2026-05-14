@@ -126,6 +126,31 @@ export class S3Service {
     return url;
   }
 
+  async getObjectBuffer(key: string, bucket = this.bucketDefault): Promise<Buffer> {
+    const out = await this.client.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      }),
+    );
+
+    if (!out.Body) {
+      throw new Error('Objeto sem conteúdo');
+    }
+
+    const body: any = out.Body;
+    if (typeof body.transformToByteArray === 'function') {
+      const bytes = await body.transformToByteArray();
+      return Buffer.from(bytes);
+    }
+
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
   // Métodos adicionais para compatibilidade com os testes
   async uploadFile(file: Express.Multer.File, prefix: string = ''): Promise<any> {
     const key = `${prefix}${file.originalname}`;

@@ -2,15 +2,33 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { GenerateChecklistPdfRepository } from './generate-pdf.repository';
+import { S3Service } from '../../../storage/s3.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
 // Alias de tipo seguro para a instância do PDFKit
 type PDFDoc = InstanceType<typeof PDFDocument>;
 
+type FotoRaw = {
+  id: string;
+  foto: string | null;
+  timestamp: Date | null;
+  tipo_foto: unknown;
+};
+
+type FotoPdf = {
+  key: string;
+  label: string;
+  timestamp?: Date | null;
+  image?: Buffer | null;
+};
+
 @Injectable()
 export class GenerateChecklistPdfService {
-  constructor(private readonly repo: GenerateChecklistPdfRepository) {}
+  constructor(
+    private readonly repo: GenerateChecklistPdfRepository,
+    private readonly s3: S3Service,
+  ) {}
 
   // ---------- Util: localizar logo e retornar Buffer ----------
   private getLogoBuffer(): Buffer | null {
@@ -41,6 +59,115 @@ export class GenerateChecklistPdfService {
     } catch {
       return null;
     }
+  }
+
+  private maybePlainBase64ToBuffer(raw?: string | null): Buffer | null {
+    if (!raw) return null;
+    const normalized = raw.replace(/\s+/g, '');
+    if (!normalized || normalized.length < 80) return null;
+    if (!/^[A-Za-z0-9+/=]+$/.test(normalized)) return null;
+
+    try {
+      const buf = Buffer.from(normalized, 'base64');
+      if (!buf.length) return null;
+      return buf;
+    } catch {
+      return null;
+    }
+  }
+
+  private formatDateTime(value?: Date | string | null): string {
+    if (!value) return '-';
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return '-';
+    return d.toLocaleString('pt-BR');
+  }
+
+  private uniqueList(values: string[]) {
+    return Array.from(new Set(values.filter((v) => !!v)));
+  }
+
+  private async resolveImageBufferByKey(
+    keyOrBase64: string | null | undefined,
+    buckets: string[],
+  ): Promise<Buffer | null> {
+    if (!keyOrBase64) return null;
+
+    const inline = this.dataUrlToBuffer(keyOrBase64) ?? this.maybePlainBase64ToBuffer(keyOrBase64);
+    if (inline) return inline;
+
+    for (const bucket of this.uniqueList(buckets)) {
+      try {
+        return await this.s3.getObjectBuffer(keyOrBase64, bucket);
+      } catch {
+        // tenta o próximo bucket
+      }
+    }
+
+    return null;
+  }
+
+  private normalizeChecklistFotos(fotosRaw: FotoRaw[]) {
+    const fotos360: FotoPdf[] = [];
+    const demaisFotos: FotoPdf[] = [];
+
+    (fotosRaw || []).forEach((f, idx) => {
+      const tipoFotoObj = typeof f.tipo_foto === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(f.tipo_foto);
+            } catch {
+              return null;
+            }
+          })()
+        : (f.tipo_foto && typeof f.tipo_foto === 'object' ? f.tipo_foto : null);
+
+      let parsedLegacy: any = null;
+      try {
+        parsedLegacy = f.foto ? JSON.parse(f.foto) : null;
+      } catch {
+        parsedLegacy = null;
+      }
+
+      const key = typeof f.foto === 'string' && f.foto.trim() && !f.foto.trim().startsWith('{')
+        ? f.foto.trim()
+        : typeof parsedLegacy?.foto === 'string' && parsedLegacy.foto.trim()
+          ? parsedLegacy.foto.trim()
+          : typeof parsedLegacy?.key === 'string' && parsedLegacy.key.trim()
+            ? parsedLegacy.key.trim()
+            : typeof parsedLegacy?.fileName === 'string' && parsedLegacy.fileName.trim()
+              ? parsedLegacy.fileName.trim()
+              : '';
+
+      if (!key) return;
+
+      const tipo = typeof tipoFotoObj?.tipo === 'string'
+        ? tipoFotoObj.tipo
+        : (typeof parsedLegacy?.tipo === 'string' ? parsedLegacy.tipo : 'foto_360');
+
+      const descricao = typeof tipoFotoObj?.descricao === 'string'
+        ? tipoFotoObj.descricao
+        : (typeof parsedLegacy?.descricao === 'string' ? parsedLegacy.descricao : null);
+
+      const posicao = typeof tipoFotoObj?.posicao === 'string'
+        ? tipoFotoObj.posicao
+        : (typeof parsedLegacy?.posicao === 'string' ? parsedLegacy.posicao : null);
+
+      const label = descricao || posicao || `Foto ${idx + 1}`;
+      const foto: FotoPdf = {
+        key,
+        label,
+        timestamp: f.timestamp,
+      };
+
+      if (!tipo || tipo === 'foto_360') {
+        fotos360.push(foto);
+      } else {
+        demaisFotos.push(foto);
+      }
+    });
+
+    return { fotos360, demaisFotos };
   }
 
   private addSectionTitle(doc: PDFDoc, title: string, marginLeft: number) {
@@ -191,44 +318,143 @@ export class GenerateChecklistPdfService {
     doc.moveDown(0.5);
   }
 
-  private drawSignaturesFooter(doc: PDFDoc, clienteImg: Buffer | null, respImg: Buffer | null, margin: number) {
-    const boxW = 160;
-    const boxH = 60;
+  private writePhotoGrid(doc: PDFDoc, title: string, fotos: FotoPdf[], margin: number) {
+    this.addSectionTitle(doc, title, margin);
 
-    this.ensurePageSpace(doc, boxH + 24, margin);
+    if (!fotos.length) {
+      doc.font('Helvetica-Oblique').fontSize(10).fillColor('#555').text('Sem fotos.', margin);
+      doc.fillColor('#000');
+      doc.moveDown(0.6);
+      return;
+    }
+
+    const cols = 3;
+    const gap = 8;
+    const usableWidth = doc.page.width - margin * 2;
+    const cardW = (usableWidth - gap * (cols - 1)) / cols;
+    const imageH = 108;
+    const cardH = 148;
+
+    let rowY = doc.y;
+
+    fotos.forEach((foto, idx) => {
+      const col = idx % cols;
+      if (col === 0) {
+        this.ensurePageSpace(doc, cardH + 8, margin);
+        rowY = doc.y;
+      }
+
+      const x = margin + col * (cardW + gap);
+      const y = rowY;
+
+      doc.rect(x, y, cardW, cardH).lineWidth(0.6).strokeColor('#d8d8d8').stroke();
+
+      if (foto.image) {
+        try {
+          doc.image(foto.image, x + 4, y + 4, {
+            fit: [cardW - 8, imageH - 8],
+            align: 'center',
+            valign: 'center',
+          });
+        } catch {
+          doc
+            .font('Helvetica')
+            .fontSize(8)
+            .fillColor('#777')
+            .text('Imagem indisponível', x + 8, y + imageH / 2 - 5, { width: cardW - 16, align: 'center' });
+          doc.fillColor('#000');
+        }
+      } else {
+        doc
+          .font('Helvetica')
+          .fontSize(8)
+          .fillColor('#777')
+          .text('Imagem indisponível', x + 8, y + imageH / 2 - 5, { width: cardW - 16, align: 'center' });
+        doc.fillColor('#000');
+      }
+
+      const metaY = y + imageH + 4;
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(8)
+        .fillColor('#111')
+        .text(foto.label || `Foto ${idx + 1}`, x + 4, metaY, {
+          width: cardW - 8,
+          ellipsis: true,
+        });
+
+      doc
+        .font('Helvetica')
+        .fontSize(7)
+        .fillColor('#555')
+        .text(`Data/Hora: ${this.formatDateTime(foto.timestamp)}`, x + 4, metaY + 12, {
+          width: cardW - 8,
+          ellipsis: true,
+        });
+      doc.fillColor('#000');
+
+      if (col === cols - 1 || idx === fotos.length - 1) {
+        doc.y = rowY + cardH + 6;
+      }
+    });
+  }
+
+  private drawSignaturesFooter(
+    doc: PDFDoc,
+    assinaturas: Array<{ label: string; image: Buffer | null }>,
+    margin: number,
+  ) {
+    const gap = 10;
+    const usableWidth = doc.page.width - margin * 2;
+    const boxW = (usableWidth - gap * 2) / 3;
+    const boxH = 62;
+
+    this.ensurePageSpace(doc, boxH + 28, margin);
 
     const yStart = doc.y + 8;
 
-    // Cliente (ESQUERDA)
-    doc.rect(margin, yStart, boxW, boxH).stroke('#cccccc');
-    if (clienteImg) {
-      doc.image(clienteImg, margin + 8, yStart + 6, {
-        width: boxW - 16,
-        height: boxH - 24,
-        fit: [boxW - 16, boxH - 24],
-      });
-    }
-    doc.font('Helvetica').fontSize(9).text('Cliente', margin, yStart + boxH + 6, {
-      align: 'left',
-      width: boxW,
+    assinaturas.forEach((sig, idx) => {
+      const x = margin + idx * (boxW + gap);
+      doc.rect(x, yStart, boxW, boxH).stroke('#cccccc');
+
+      if (sig.image) {
+        try {
+          doc.image(sig.image, x + 6, yStart + 6, {
+            width: boxW - 12,
+            height: boxH - 24,
+            fit: [boxW - 12, boxH - 24],
+            align: 'center',
+            valign: 'center',
+          });
+        } catch {
+          doc
+            .font('Helvetica')
+            .fontSize(8)
+            .fillColor('#888')
+            .text('Assinatura inválida', x + 6, yStart + 24, { width: boxW - 12, align: 'center' });
+          doc.fillColor('#000');
+        }
+      } else {
+        doc
+          .font('Helvetica')
+          .fontSize(8)
+          .fillColor('#888')
+          .text('Sem assinatura', x + 6, yStart + 24, { width: boxW - 12, align: 'center' });
+        doc.fillColor('#000');
+      }
+
+      doc
+        .font('Helvetica')
+        .fontSize(9)
+        .fillColor('#111')
+        .text(sig.label, x, yStart + boxH + 6, {
+          width: boxW,
+          align: 'center',
+        });
+      doc.fillColor('#000');
     });
 
-    // Responsável (DIREITA)
-    const rightX = doc.page.width - margin - boxW;
-    doc.rect(rightX, yStart, boxW, boxH).stroke('#cccccc');
-    if (respImg) {
-      doc.image(respImg, rightX + 8, yStart + 6, {
-        width: boxW - 16,
-        height: boxH - 24,
-        fit: [boxW - 16, boxH - 24],
-      });
-    }
-    doc.font('Helvetica').fontSize(9).text('Responsável', rightX, yStart + boxH + 6, {
-      align: 'right',
-      width: boxW,
-    });
-
-    doc.moveDown(2);
+    doc.y = yStart + boxH + 22;
   }
 
   async generatePdfBuffer(id: string): Promise<Buffer> {
@@ -244,13 +470,49 @@ export class GenerateChecklistPdfService {
 
     const margin = 12;
 
+    const fotosRaw = (await this.repo.findFotosByChecklistId(c.id)) as FotoRaw[];
+    const { fotos360, demaisFotos } = this.normalizeChecklistFotos(fotosRaw);
+
+    const avariasFotos: FotoPdf[] = (c.ofi_checklists_avarias || [])
+      .filter((a) => !!a.fotoBase64)
+      .map((a, idx) => ({
+        key: a.fotoBase64 || '',
+        label: a.peca || a.tipo || `Avaria ${idx + 1}`,
+        timestamp: a.timestamp,
+      }));
+
+    const bucketAvarias = process.env.S3_BUCKET_AVARIAS || 'avarias';
+    const bucketChecklist = process.env.S3_BUCKET_CHECKLIST || 'check-list';
+    const bucketDefault = this.s3.getDefaultBucket();
+
+    const avariasComImagem = await Promise.all(
+      avariasFotos.map(async (f) => ({
+        ...f,
+        image: await this.resolveImageBufferByKey(f.key, [bucketAvarias, bucketDefault, bucketChecklist]),
+      })),
+    );
+
+    const fotos360ComImagem = await Promise.all(
+      fotos360.map(async (f) => ({
+        ...f,
+        image: await this.resolveImageBufferByKey(f.key, [bucketChecklist, bucketDefault, bucketAvarias]),
+      })),
+    );
+
+    const demaisComImagem = await Promise.all(
+      demaisFotos.map(async (f) => ({
+        ...f,
+        image: await this.resolveImageBufferByKey(f.key, [bucketChecklist, bucketDefault, bucketAvarias]),
+      })),
+    );
+
     // =============================
     // Cabeçalho com LOGO + TÍTULO (título centralizado verticalmente)
     // =============================
     const logo = this.getLogoBuffer();
     const headerY = doc.y; // geralmente = margin
 
-    const title = 'Checklist de Entrada de Veículo – AC';
+    const title = 'Checklist de Entrada e Saída de Veículo – AC';
     const titleFontSize = 14;
     const logoSize = 28; // caixa quadrada conhecida para facilitar centragem
     const gap = 8;
@@ -271,15 +533,28 @@ export class GenerateChecklistPdfService {
     // Altura do título (pode variar se quebrar linha)
     const titleHeight = doc.heightOfString(title, { width: titleWidth });
 
+    const headerInfo = `Entrada: ${this.formatDateTime(c.dataHoraEntrada)}   |   Saída: ${this.formatDateTime(c.dataHoraEntrega)}`;
+    doc.font('Helvetica').fontSize(9);
+    const infoHeight = doc.heightOfString(headerInfo, { width: titleWidth });
+
     // Calcula Y do título para centralizar verticalmente em relação à altura da logo (ou do próprio título se não houver logo)
-    const referenceHeight = logo ? logoSize : titleHeight;
-    const yTitle = headerY + (referenceHeight - titleHeight) / 2;
+    const textBlockHeight = titleHeight + 2 + infoHeight;
+    const referenceHeight = logo ? logoSize : textBlockHeight;
+    const yTitle = headerY + (referenceHeight - textBlockHeight) / 2;
 
     // Desenha o título alinhado à esquerda, centralizado verticalmente
+    doc.font('Helvetica-Bold').fontSize(titleFontSize);
     doc.text(title, titleX, yTitle, { width: titleWidth, align: 'left' });
 
+    doc
+      .font('Helvetica')
+      .fontSize(9)
+      .fillColor('#444')
+      .text(headerInfo, titleX, yTitle + titleHeight + 2, { width: titleWidth, align: 'left' });
+    doc.fillColor('#000');
+
     // Altura total do bloco do cabeçalho
-    headerBlockHeight = Math.max(headerBlockHeight, titleHeight);
+    headerBlockHeight = Math.max(headerBlockHeight, textBlockHeight);
 
     // Avança o cursor após o cabeçalho e traça a linha
     doc.y = headerY + headerBlockHeight + 6;
@@ -302,10 +577,13 @@ export class GenerateChecklistPdfService {
     this.textLabelValue(
       doc,
       'Data/Hora Entrada: ',
-      c.dataHoraEntrada ? new Date(c.dataHoraEntrada).toLocaleString('pt-BR') : '-',
+      this.formatDateTime(c.dataHoraEntrada),
       margin + 240,
       y0,
     );
+
+    const y0b = doc.y + 2;
+    this.textLabelValue(doc, 'Data/Hora Saída: ', this.formatDateTime(c.dataHoraEntrega), margin, y0b);
 
     const y1 = doc.y + 2;
     this.textLabelValue(doc, 'Cliente: ', c.clienteNome || '-', margin, y1);
@@ -355,6 +633,11 @@ export class GenerateChecklistPdfService {
       doc.moveDown(0.6);
     }
 
+    // Fotos
+    this.writePhotoGrid(doc, 'Fotos de Avarias', avariasComImagem, margin);
+    this.writePhotoGrid(doc, 'Fotos 360', fotos360ComImagem, margin);
+    this.writePhotoGrid(doc, 'Demais Fotos', demaisComImagem, margin);
+
     // Observações
     if (c.observacoes) {
       this.addSectionTitle(doc, 'Observações', margin);
@@ -365,10 +648,19 @@ export class GenerateChecklistPdfService {
     }
 
     // Assinaturas (rodapé)
-    const imgCliente = this.dataUrlToBuffer((c as any).assinaturasclienteBase64);
-    const imgResp = this.dataUrlToBuffer((c as any).assinaturasresponsavelBase64);
+    const imgClienteEntrada = this.dataUrlToBuffer((c as any).assinaturasclienteBase64);
+    const imgRespEntrada = this.dataUrlToBuffer((c as any).assinaturasresponsavelBase64);
+    const imgClienteSaida = this.dataUrlToBuffer((c as any).assinaturaRetiradaBase64);
     this.addSectionTitle(doc, 'Assinaturas', margin);
-    this.drawSignaturesFooter(doc, imgCliente, imgResp, margin);
+    this.drawSignaturesFooter(
+      doc,
+      [
+        { label: 'Responsável (Entrada)', image: imgRespEntrada },
+        { label: 'Cliente (Entrada)', image: imgClienteEntrada },
+        { label: 'Cliente (Saída)', image: imgClienteSaida },
+      ],
+      margin,
+    );
 
     // Numeração de páginas
     const range = doc.bufferedPageRange();

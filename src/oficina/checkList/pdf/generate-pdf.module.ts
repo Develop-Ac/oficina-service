@@ -4,8 +4,10 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { GenerateChecklistPdfService } from './generate-pdf.service';
 import { GenerateChecklistPdfController } from './generate-pdf.controller';
 import { GenerateChecklistPdfRepository } from './generate-pdf.repository';
+import { S3Module } from '../../../storage/s3.module';
 
 @Module({
+  imports: [S3Module],
   controllers: [GenerateChecklistPdfController],
   providers: [PrismaService, GenerateChecklistPdfService, GenerateChecklistPdfRepository],
   exports: [GenerateChecklistPdfService, GenerateChecklistPdfRepository],
