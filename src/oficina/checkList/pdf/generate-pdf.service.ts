@@ -402,7 +402,8 @@ export class GenerateChecklistPdfService {
   ) {
     const gap = 10;
     const usableWidth = doc.page.width - margin * 2;
-    const boxW = (usableWidth - gap * 2) / 3;
+    const totalBoxes = Math.max(assinaturas.length, 1);
+    const boxW = (usableWidth - gap * (totalBoxes - 1)) / totalBoxes;
     const boxH = 62;
 
     this.ensurePageSpace(doc, boxH + 28, margin);
@@ -647,13 +648,30 @@ export class GenerateChecklistPdfService {
     const imgClienteEntrada = this.dataUrlToBuffer((c as any).assinaturasclienteBase64);
     const imgRespEntrada = this.dataUrlToBuffer((c as any).assinaturasresponsavelBase64);
     const imgClienteSaida = this.dataUrlToBuffer((c as any).assinaturaRetiradaBase64);
+
+    const hasClienteEntrada = !!imgClienteEntrada;
+    const hasClienteSaida = !!imgClienteSaida;
+
+    const assinaturasCliente: Array<{ label: string; image: Buffer | null }> = [];
+
+    if (hasClienteEntrada && hasClienteSaida) {
+      assinaturasCliente.push({ label: 'Cliente (Entrada)', image: imgClienteEntrada });
+      assinaturasCliente.push({ label: 'Cliente (Saída)', image: imgClienteSaida });
+    } else if (hasClienteEntrada || hasClienteSaida) {
+      assinaturasCliente.push({
+        label: 'Cliente',
+        image: imgClienteEntrada ?? imgClienteSaida,
+      });
+    } else {
+      assinaturasCliente.push({ label: 'Cliente', image: null });
+    }
+
     this.addSectionTitle(doc, 'Assinaturas', margin);
     this.drawSignaturesFooter(
       doc,
       [
-        { label: 'Responsável (Entrada)', image: imgRespEntrada },
-        { label: 'Cliente (Entrada)', image: imgClienteEntrada },
-        { label: 'Cliente (Saída)', image: imgClienteSaida },
+        { label: 'Responsável', image: imgRespEntrada },
+        ...assinaturasCliente,
       ],
       margin,
     );
