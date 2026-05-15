@@ -5,6 +5,7 @@ import { GenerateChecklistPdfRepository } from './generate-pdf.repository';
 import { S3Service } from '../../../storage/s3.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import { formatDateTimeCuiaba } from '../../../shared/cuiaba-time.util';
 
 // Alias de tipo seguro para a instância do PDFKit
 type PDFDoc = InstanceType<typeof PDFDocument>;
@@ -70,10 +71,7 @@ export class GenerateChecklistPdfService {
   }
 
   private formatDateTime(value?: Date | string | null): string {
-    if (!value) return '-';
-    const d = value instanceof Date ? value : new Date(value);
-    if (Number.isNaN(d.getTime())) return '-';
-    return d.toLocaleString('pt-BR');
+    return formatDateTimeCuiaba(value);
   }
 
   private uniqueList(values: string[]) {

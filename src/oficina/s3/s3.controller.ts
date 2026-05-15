@@ -24,6 +24,7 @@ import { memoryStorage } from 'multer';
 import sharp from 'sharp';
 import { randomBytes } from 'crypto';
 import { S3Service } from '../../storage/s3.service';
+import { toCuiabaIsoOffset } from '../../shared/cuiaba-time.util';
 
 class UploadResponseDto {
   @ApiProperty({ description: 'Status da operação', example: true })
@@ -34,6 +35,9 @@ class UploadResponseDto {
 
   @ApiProperty({ description: 'Chave do arquivo no bucket', example: 'abc123def456.png' })
   key!: string;
+
+  @ApiProperty({ description: 'Momento do upload no servidor em Cuiaba (-04:00)', example: '2026-05-15T10:31:22-04:00' })
+  uploadedAt!: string;
 
   @ApiProperty({ description: 'URL pré-assinada (quando disponível)', required: false })
   url?: string;
@@ -154,7 +158,7 @@ export class UploadsController {
     }
 
     // >>> DEVOLVE A KEY <<<
-    return { ok: true, fileName: keyName, key: keyName, url };
+    return { ok: true, fileName: keyName, key: keyName, uploadedAt: toCuiabaIsoOffset(), url };
   }
 
   @Post('checklist')
@@ -243,7 +247,7 @@ export class UploadsController {
     }
 
     // >>> DEVOLVE A KEY <<<
-    return { ok: true, fileName: keyName, key: keyName, url };
+    return { ok: true, fileName: keyName, key: keyName, uploadedAt: toCuiabaIsoOffset(), url };
   }
 
   @Get('avarias/url')

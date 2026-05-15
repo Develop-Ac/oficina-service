@@ -3,6 +3,7 @@ import { ChecklistRepository } from './checkList.repository';
 import { CreateChecklistDto } from './dto/create-checklist.dto';
 import { CreateChecklistFotoDto } from './dto/create-checklist-foto.dto';
 import { Prisma } from '@prisma/client';
+import { nowInCuiabaDate, parseToCuiabaDate } from '../../shared/cuiaba-time.util';
 
 type ListQuery = {
   page?: number | string;
@@ -85,7 +86,7 @@ export class ChecklistsService {
 
     const checklist = await this.repo.create({
       osInterna: body.osInterna ?? null,
-      dataHoraEntrada: body.dataHoraEntrada ? new Date(body.dataHoraEntrada) : null,
+      dataHoraEntrada: nowInCuiabaDate(),
       observacoes: body.observacoes ?? null,
       combustivelPercentual: body.combustivelPercentual ?? null,
 
@@ -124,7 +125,7 @@ export class ChecklistsService {
               normY: a.normY ?? null,
               normZ: a.normZ ?? null,
               fotoBase64: a.fotoBase64 ?? null,
-              timestamp: a.timestamp ? new Date(a.timestamp) : null,
+              timestamp: parseToCuiabaDate((a as any).timestamp) ?? nowInCuiabaDate(),
             })),
           }
         : undefined,
@@ -429,7 +430,7 @@ export class ChecklistsService {
     const entregue = await this.repo.update(
       { id },
       {
-        dataHoraEntrega: new Date(),
+        dataHoraEntrega: nowInCuiabaDate(),
         assinaturaRetiradaBase64,
       },
     );
